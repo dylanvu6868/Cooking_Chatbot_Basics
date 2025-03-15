@@ -105,8 +105,3 @@ To exit, type `/quit`.
 
 - **dylanvu6868** (@dylanvu6868)
 - data.json from Minh Dung TranTran
-
-## License
-
-This project is licensed under the MIT License.
-
