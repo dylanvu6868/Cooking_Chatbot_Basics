@@ -104,4 +104,4 @@ To exit, type `/quit`.
 ## Contributors
 
 - **dylanvu6868** (@dylanvu6868)
-- data.json from Minh Dung TranTran
+- data.json from Minh Dung Tran
