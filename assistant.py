@@ -75,6 +75,69 @@ class ChatbotAssistant:
         self.vocabulary = sorted(set(self.vocabulary))  # Loại bỏ trùng lặp và sắp xếp từ vựng
         print(f"Tổng số từ trong vocabulary: {len(self.vocabulary)}")  # Debug
 
+    def prepare_data(self):
+        """
+        Chuyển dữ liệu intents thành dạng bag-of-words để huấn luyện mô hình.
+        """
+        bags, indices = [], []
+
+        for document in self.documents:
+            bag = self.bag_of_words(document[0]).numpy()  # Chuyển câu thành vector bag-of-words
+            intent_index = self.intents.index(document[1])  # Tìm index của intent
+            bags.append(bag)
+            indices.append(intent_index)
+
+        self.X = np.array(bags, dtype=np.float32)  # Đầu vào X
+        self.y = np.array(indices, dtype=np.int64)  # Nhãn y
+
+    def train_model(self, batch_size, lr, epochs):
+        """
+        Huấn luyện mô hình chatbot bằng mạng neuron đơn giản.
+        """
+        X_tensor = torch.tensor(self.X, dtype=torch.float32)
+        y_tensor = torch.tensor(self.y, dtype=torch.long)
+
+        dataset = TensorDataset(X_tensor, y_tensor)  # Tạo dataset
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)  # Tạo DataLoader để huấn luyện
+
+        self.model = ChatbotModel(self.X.shape[1], len(self.intents))  # Khởi tạo mô hình
+
+        criterion = torch.nn.CrossEntropyLoss()  # Hàm mất mát
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)  # Trình tối ưu Adam
+
+        for epoch in range(epochs):  # Vòng lặp huấn luyện
+            running_loss = 0.0
+            for batch_X, batch_y in loader:
+                optimizer.zero_grad()
+                outputs = self.model(batch_X)  # Dự đoán
+                loss = criterion(outputs, batch_y)  # Tính loss
+                loss.backward()
+                optimizer.step()
+                running_loss += loss.item()
+
+            print(f"Epoch {epoch+1}: Loss: {running_loss / len(loader):.4f}")  # In loss
+            
+    def save_model(self, model_path, dimensions_path):
+        """
+        Lưu mô hình đã huấn luyện và thông tin về kích thước đầu vào/đầu ra.
+        """
+        if self.model is None:
+            raise ValueError("[❌ ERROR] Mô hình chưa được huấn luyện. Hãy gọi train_model() trước!")
+
+        # Lưu trọng số của mô hình
+        torch.save(self.model.state_dict(), model_path)
+        print(f"[✅ INFO] Mô hình đã được lưu tại {model_path}")
+
+        # Lưu thông tin kích thước
+        dimensions = {
+            "input_size": self.X.shape[1],
+            "output_size": len(self.intents)
+        }
+        with open(dimensions_path, 'w', encoding='utf-8') as f:
+            json.dump(dimensions, f, indent=4, ensure_ascii=False)
+        
+        print(f"[✅ INFO] Kích thước mô hình đã được lưu tại {dimensions_path}")
+        
     def load_model(self, model_path, dimensions_path):
         """
         Tải mô hình đã huấn luyện cùng với thông tin kích thước input/output.
@@ -82,19 +145,20 @@ class ChatbotAssistant:
         if not os.path.exists(model_path) or not os.path.exists(dimensions_path):
             raise FileNotFoundError("[❌ ERROR] Tệp mô hình hoặc thông tin kích thước không tồn tại!")
 
-        # Đọc thông tin kích thước đầu vào/đầu ra từ file
+    # Đọc thông tin kích thước đầu vào/đầu ra từ file
         with open(dimensions_path, 'r', encoding='utf-8') as f:
             dimensions = json.load(f)
 
         input_size = dimensions["input_size"]
         output_size = dimensions["output_size"]
 
-        # Khởi tạo mô hình với kích thước phù hợp
+    # Khởi tạo mô hình với kích thước phù hợp
         self.model = ChatbotModel(input_size, output_size)
         self.model.load_state_dict(torch.load(model_path))
         self.model.eval()  # Chuyển mô hình sang chế độ đánh giá
 
         print("[✅ INFO] Mô hình đã được tải thành công!")
+
 
     def process_message(self, input_message):
         """
@@ -112,9 +176,7 @@ class ChatbotAssistant:
 
         response_data = self.intents_responses.get(predicted_intent, {})
 
-        return f"""
-Món ăn: {predicted_intent}
+        return f"""Món ăn: {predicted_intent}
 Nguyên liệu: {response_data.get('Ingredients', 'Không có thông tin.')}
 Mẹo nấu ăn: {response_data.get('Tip', 'Không có mẹo.')}
-Các bước thực hiện: {response_data.get('Steps', 'Không có hướng dẫn.')}
-"""  
+Các bước thực hiện: {response_data.get('Steps', 'Không có hướng dẫn.')}"""
